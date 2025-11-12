@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../Firebase/firebase';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -13,14 +11,81 @@ import {
   Truck,
   AlertCircle,
   Eye,
-  Calendar,
   ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// Mock Data
+const MOCK_PRODUCTS = [
+  { id: '1', name: 'Cute Pink Dress', stock: 15, image: 'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?w=100&h=100&fit=crop' },
+  { id: '2', name: 'Blue Denim Jacket', stock: 8, image: 'https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?w=100&h=100&fit=crop' },
+  { id: '3', name: 'Rainbow T-Shirt', stock: 3, image: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=100&h=100&fit=crop' },
+  { id: '4', name: 'Yellow Summer Shorts', stock: 12, image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=100&h=100&fit=crop' },
+  { id: '5', name: 'Striped Cotton Shirt', stock: 2, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=100&h=100&fit=crop' },
+  { id: '6', name: 'Winter Hoodie', stock: 20, image: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=100&h=100&fit=crop' },
+];
+
+const MOCK_CUSTOMERS = [
+  { id: '1', name: 'Sarah Johnson', email: 'sarah@example.com', createdAt: new Date('2025-10-15') },
+  { id: '2', name: 'Michael Chen', email: 'michael@example.com', createdAt: new Date('2025-10-20') },
+  { id: '3', name: 'Emily Rodriguez', email: 'emily@example.com', createdAt: new Date('2025-11-01') },
+  { id: '4', name: 'David Kim', email: 'david@example.com', createdAt: new Date('2025-11-05') },
+  { id: '5', name: 'Lisa Anderson', email: 'lisa@example.com', createdAt: new Date('2025-11-08') },
+  { id: '6', name: 'James Wilson', email: 'james@example.com', createdAt: new Date('2025-09-12') },
+];
+
+const generateMockOrders = () => {
+  const orders = [];
+  const statuses = ['pending', 'processing', 'shipped', 'delivered'];
+  const now = new Date();
+  
+  for (let i = 0; i < 25; i++) {
+    const daysAgo = Math.floor(Math.random() * 60);
+    const createdAt = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+    const customer = MOCK_CUSTOMERS[Math.floor(Math.random() * MOCK_CUSTOMERS.length)];
+    const numItems = Math.floor(Math.random() * 3) + 1;
+    
+    const items = [];
+    let total = 0;
+    
+    for (let j = 0; j < numItems; j++) {
+      const product = MOCK_PRODUCTS[Math.floor(Math.random() * MOCK_PRODUCTS.length)];
+      const quantity = Math.floor(Math.random() * 3) + 1;
+      const price = Math.floor(Math.random() * 8000) + 2000;
+      
+      items.push({
+        name: product.name,
+        image: product.image,
+        quantity,
+        price
+      });
+      
+      total += price * quantity;
+    }
+    
+    orders.push({
+      id: `order_${i + 1}`,
+      orderNumber: `ORD-${String(i + 1).padStart(4, '0')}`,
+      userId: customer.id,
+      createdAt,
+      status: statuses[Math.floor(Math.random() * statuses.length)],
+      paymentStatus: Math.random() > 0.2 ? 'paid' : 'pending',
+      total,
+      items,
+      shippingAddress: {
+        firstName: customer.name.split(' ')[0],
+        lastName: customer.name.split(' ')[1]
+      }
+    });
+  }
+  
+  return orders.sort((a, b) => b.createdAt - a.createdAt);
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [showFullRevenue, setShowFullRevenue] = useState(false);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalOrders: 0,
@@ -40,31 +105,24 @@ const Dashboard = () => {
   const [revenueData, setRevenueData] = useState([]);
 
   useEffect(() => {
-    fetchDashboardData();
+    // Simulate loading
+    setTimeout(() => {
+      fetchDashboardData();
+    }, 1000);
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = () => {
     try {
       setLoading(true);
       
-      // Fetch all data in parallel
-      const [ordersData, customersData, productsData] = await Promise.all([
-        fetchOrders(),
-        fetchCustomers(),
-        fetchProducts()
-      ]);
+      const orders = generateMockOrders();
+      const customers = MOCK_CUSTOMERS;
+      const products = MOCK_PRODUCTS;
 
-      // Calculate statistics
-      calculateStats(ordersData, customersData, productsData);
-      
-      // Get recent orders
-      setRecentOrders(ordersData.slice(0, 5));
-      
-      // Calculate top products
-      calculateTopProducts(ordersData);
-      
-      // Calculate revenue trend
-      calculateRevenueTrend(ordersData);
+      calculateStats(orders, customers, products);
+      setRecentOrders(orders.slice(0, 5));
+      calculateTopProducts(orders);
+      calculateRevenueTrend(orders);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -73,47 +131,11 @@ const Dashboard = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    const allOrders = [];
-    const usersSnapshot = await getDocs(collection(db, 'users'));
-    
-    for (const userDoc of usersSnapshot.docs) {
-      const ordersRef = collection(db, 'users', userDoc.id, 'orders');
-      const ordersQuery = query(ordersRef, orderBy('createdAt', 'desc'));
-      const ordersSnapshot = await getDocs(ordersQuery);
-      
-      ordersSnapshot.forEach(orderDoc => {
-        const data = orderDoc.data();
-        allOrders.push({
-          id: orderDoc.id,
-          userId: userDoc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
-        });
-      });
-    }
-    
-    return allOrders;
-  };
-
-  const fetchCustomers = async () => {
-    const usersRef = collection(db, 'users');
-    const usersSnapshot = await getDocs(usersRef);
-    return usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  };
-
-  const fetchProducts = async () => {
-    const productsRef = collection(db, 'products');
-    const productsSnapshot = await getDocs(productsRef);
-    return productsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  };
-
   const calculateStats = (orders, customers, products) => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-    // Current period stats
     const recentOrders = orders.filter(o => o.createdAt >= thirtyDaysAgo);
     const previousOrders = orders.filter(o => o.createdAt >= sixtyDaysAgo && o.createdAt < thirtyDaysAgo);
 
@@ -133,15 +155,8 @@ const Dashboard = () => {
       ? ((recentOrders.length - previousOrders.length) / previousOrders.length) * 100
       : 0;
 
-    const recentCustomers = customers.filter(c => {
-      const createdAt = c.createdAt?.toDate ? c.createdAt.toDate() : new Date(c.createdAt || 0);
-      return createdAt >= thirtyDaysAgo;
-    }).length;
-
-    const previousCustomers = customers.filter(c => {
-      const createdAt = c.createdAt?.toDate ? c.createdAt.toDate() : new Date(c.createdAt || 0);
-      return createdAt >= sixtyDaysAgo && createdAt < thirtyDaysAgo;
-    }).length;
+    const recentCustomers = customers.filter(c => c.createdAt >= thirtyDaysAgo).length;
+    const previousCustomers = customers.filter(c => c.createdAt >= sixtyDaysAgo && c.createdAt < thirtyDaysAgo).length;
 
     const customersChange = previousCustomers > 0
       ? ((recentCustomers - previousCustomers) / previousCustomers) * 100
@@ -251,7 +266,7 @@ const Dashboard = () => {
         {/* Main Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           {/* Total Revenue */}
-          <div className="bg-gradient-to-br from-pink-500 to-pink-600 p-6 shadow-lg">
+          <div className="bg-gradient-to-br from-pink-500 to-pink-600 p-6 shadow-lg rounded-lg">
             <div className="flex items-center justify-between mb-4">
               <div className="bg-white/20 p-3 rounded-lg">
                 <DollarSign className="text-white" size={24} />
@@ -271,7 +286,7 @@ const Dashboard = () => {
           </div>
 
           {/* Total Orders */}
-          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg">
+          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg rounded-lg">
             <div className="flex items-center justify-between mb-4">
               <div className="bg-pink-500/20 p-3 rounded-lg">
                 <ShoppingBag className="text-pink-300" size={24} />
@@ -289,7 +304,7 @@ const Dashboard = () => {
           </div>
 
           {/* Total Customers */}
-          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg">
+          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg rounded-lg">
             <div className="flex items-center justify-between mb-4">
               <div className="bg-blue-500/20 p-3 rounded-lg">
                 <Users className="text-blue-400" size={24} />
@@ -307,7 +322,7 @@ const Dashboard = () => {
           </div>
 
           {/* Total Products */}
-          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg">
+          <div className="bg-slate-800 border border-pink-500 p-6 shadow-lg rounded-lg">
             <div className="flex items-center justify-between mb-4">
               <div className="bg-purple-500/20 p-3 rounded-lg">
                 <Package className="text-purple-400" size={24} />
@@ -327,7 +342,7 @@ const Dashboard = () => {
 
         {/* Order Status Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-slate-800 border border-yellow-500/50 p-4">
+          <div className="bg-slate-800 border border-yellow-500/50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm mb-1">Pending</p>
@@ -337,7 +352,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-slate-800 border border-blue-500/50 p-4">
+          <div className="bg-slate-800 border border-blue-500/50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm mb-1">Processing</p>
@@ -347,7 +362,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-slate-800 border border-purple-500/50 p-4">
+          <div className="bg-slate-800 border border-purple-500/50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm mb-1">Shipped</p>
@@ -357,7 +372,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-slate-800 border border-green-500/50 p-4">
+          <div className="bg-slate-800 border border-green-500/50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm mb-1">Delivered</p>
@@ -370,18 +385,18 @@ const Dashboard = () => {
 
         <div className="grid lg:grid-cols-3 gap-6 mb-6">
           {/* Revenue Chart */}
-          <div className="lg:col-span-2 bg-slate-800 border border-pink-500 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Revenue Trend (Last 7 Days)</h3>
-              <button 
-                onClick={() => navigate('/orders')}
-                className="text-pink-300 hover:text-pink-400 text-sm flex items-center gap-1"
-              >
-                View All <ArrowRight size={16} />
-              </button>
-            </div>
+          <div className="lg:col-span-2 bg-slate-800 border border-pink-500 p-6 rounded-lg">
+          <div className="flex items-center justify-between mb-6">
+  <h3 className="text-lg font-semibold text-white">Revenue Trend (Last {showFullRevenue ? '7' : '3'} Days)</h3>
+  <button 
+    onClick={() => setShowFullRevenue(!showFullRevenue)}
+    className="text-pink-300 hover:text-pink-400 text-sm flex items-center gap-1"
+  >
+    {showFullRevenue ? 'Show Less' : 'View All'} <ArrowRight size={16} />
+  </button>
+</div>
             <div className="space-y-4">
-              {revenueData.map((data, index) => (
+            {(showFullRevenue ? revenueData : revenueData.slice(-3)).map((data, index) => (
                 <div key={index} className="flex items-center gap-4">
                   <span className="text-gray-400 text-sm w-12">{data.day}</span>
                   <div className="flex-1">
@@ -406,51 +421,59 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Top Products */}
-          <div className="bg-slate-800 border border-pink-500 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Top Products</h3>
-              <button 
-                onClick={() => navigate('/products')}
-                className="text-pink-300 hover:text-pink-400 text-sm flex items-center gap-1"
-              >
-                View All <ArrowRight size={16} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              {topProducts.map((product, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
-                    {product.image ? (
-                      <img 
-                        src={product.image} 
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-500">
-                        <Package size={20} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{product.name}</p>
-                    <p className="text-gray-400 text-xs">{product.quantity} sold</p>
-                  </div>
-                  <p className="text-pink-300 font-semibold text-sm">
-                    ₦{(product.revenue / 1000).toFixed(1)}k
-                  </p>
-                </div>
-              ))}
-              {topProducts.length === 0 && (
-                <p className="text-gray-500 text-center py-8">No sales data yet</p>
-              )}
-            </div>
+       {/* Top Products Categories */}
+<div className="bg-slate-800 border border-pink-500 p-6 rounded-lg">
+  <h3 className="text-lg font-semibold text-white mb-6">Top Products</h3>
+  
+  <div className="space-y-6">
+    {/* Most Revenue */}
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-pink-300">Most Revenue</p>
+      </div>
+      {topProducts.slice(0, 2).map((product, index) => (
+        <div key={index} className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
+            {product.image && <img src={product.image} alt={product.name} className="w-full h-full object-cover" />}
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-medium truncate">{product.name}</p>
+            <p className="text-gray-400 text-xs">₦{(product.revenue / 1000).toFixed(1)}k</p>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Most Ordered */}
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-blue-300">Most Ordered</p>
+      </div>
+      {[...topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 2).map((product, index) => (
+        <div key={index} className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
+            {product.image && <img src={product.image} alt={product.name} className="w-full h-full object-cover" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-medium truncate">{product.name}</p>
+            <p className="text-gray-400 text-xs">{product.quantity} sold</p>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <button 
+      onClick={() => navigate('/products')}
+      className="w-full text-pink-300 hover:text-pink-400 text-sm flex items-center justify-center gap-1 py-2 border border-pink-500 rounded-lg"
+    >
+      View All Products <ArrowRight size={16} />
+    </button>
+  </div>
+</div>
         </div>
 
         {/* Recent Orders */}
-        <div className="bg-slate-800 border border-pink-500 overflow-hidden">
+        <div className="bg-slate-800 border border-pink-500 overflow-hidden rounded-lg">
           <div className="px-6 py-4 border-b border-pink-500 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">Recent Orders</h3>
             <button 
@@ -461,65 +484,105 @@ const Dashboard = () => {
             </button>
           </div>
           
-          {recentOrders.length === 0 ? (
-            <div className="text-center py-12">
-              <ShoppingBag className="mx-auto text-gray-600 mb-4" size={48} />
-              <p className="text-gray-400">No orders yet</p>
+        <div className="overflow-x-auto">
+  <table className="w-full">
+    <thead className="bg-slate-700 border-b border-pink-500">
+      <tr>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Order #</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Customer</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Items</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Date</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Total</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Payment</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Status</th>
+        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Action</th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-pink-500">
+      {recentOrders.map((order) => (
+        <tr key={order.id} className="hover:bg-slate-700">
+          <td className="px-4 py-4">
+            <div>
+              <p className="text-sm font-medium text-white">{order.orderNumber}</p>
+              <p className="text-xs text-gray-400">{order.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-700 border-b border-pink-500">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Order #</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Customer</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-pink-500">
-                  {recentOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-700">
-                      <td className="px-6 py-4 text-sm font-medium text-white">
-                        {order.orderNumber}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-white">
-                        {order.shippingAddress?.firstName} {order.shippingAddress?.lastName}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
-                        {order.createdAt.toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-white">
-                        ₦{(order.total || 0).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 text-xs font-medium rounded border ${getStatusColor(order.status)}`}>
-                          {order.status || 'pending'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => navigate('/orders')}
-                          className="text-pink-300 hover:text-pink-400"
-                        >
-                          <Eye size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </td>
+          <td className="px-4 py-4">
+            <div>
+              <p className="text-sm text-white font-medium">
+                {order.shippingAddress?.firstName} {order.shippingAddress?.lastName}
+              </p>
+              <p className="text-xs text-gray-400">
+                {MOCK_CUSTOMERS.find(c => c.id === order.userId)?.email || 'N/A'}
+              </p>
             </div>
-          )}
+          </td>
+          <td className="px-4 py-4">
+            <div className="flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {order.items.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="w-8 h-8 rounded-full border-2 border-slate-800 overflow-hidden bg-slate-700">
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="text-sm text-white font-medium">{order.items.length} item{order.items.length > 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-400">
+                  {order.items.reduce((sum, item) => sum + item.quantity, 0)} units
+                </p>
+              </div>
+            </div>
+          </td>
+          <td className="px-4 py-4">
+            <div>
+              <p className="text-sm text-gray-400">{order.createdAt.toLocaleDateString()}</p>
+              <p className="text-xs text-gray-500">
+                {Math.floor((new Date() - order.createdAt) / (1000 * 60 * 60 * 24))} days ago
+              </p>
+            </div>
+          </td>
+          <td className="px-4 py-4">
+            <p className="text-sm font-semibold text-white">₦{(order.total || 0).toLocaleString()}</p>
+            <p className="text-xs text-gray-400">
+              ₦{Math.floor(order.total / order.items.reduce((sum, item) => sum + item.quantity, 0)).toLocaleString()}/item
+            </p>
+          </td>
+          <td className="px-4 py-4">
+            <span className={`px-2 py-1 text-xs font-medium rounded border ${
+              order.paymentStatus === 'paid' 
+                ? 'bg-green-100 text-green-800 border-green-300' 
+                : 'bg-yellow-100 text-yellow-800 border-yellow-300'
+            }`}>
+              {order.paymentStatus}
+            </span>
+          </td>
+          <td className="px-4 py-4">
+            <span className={`px-2 py-1 text-xs font-medium rounded border ${getStatusColor(order.status)}`}>
+              {order.status || 'pending'}
+            </span>
+          </td>
+          <td className="px-4 py-4">
+            <button
+              onClick={() => navigate('/orders')}
+              className="text-pink-300 hover:text-pink-400 p-2 hover:bg-slate-600 rounded transition-colors"
+              title="View Details"
+            >
+              <Eye size={18} />
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
         </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
           <button 
             onClick={() => navigate('/add-product')}
-            className="bg-pink-500 hover:bg-pink-600 text-white p-6 transition-colors flex items-center justify-between"
+            className="bg-pink-500 hover:bg-pink-600 text-white p-6 rounded-lg transition-colors flex items-center justify-between"
           >
             <div>
               <p className="font-semibold mb-1">Add New Product</p>
@@ -530,7 +593,7 @@ const Dashboard = () => {
 
           <button 
             onClick={() => navigate('/orders')}
-            className="bg-slate-800 hover:bg-slate-700 border border-pink-500 text-white p-6 transition-colors flex items-center justify-between"
+            className="bg-slate-800 hover:bg-slate-700 border border-pink-500 text-white p-6 rounded-lg transition-colors flex items-center justify-between"
           >
             <div>
               <p className="font-semibold mb-1">Manage Orders</p>
@@ -541,7 +604,7 @@ const Dashboard = () => {
 
           <button 
             onClick={() => navigate('/customers')}
-            className="bg-slate-800 hover:bg-slate-700 border border-pink-500 text-white p-6 transition-colors flex items-center justify-between"
+            className="bg-slate-800 hover:bg-slate-700 border border-pink-500 text-white p-6 rounded-lg transition-colors flex items-center justify-between"
           >
             <div>
               <p className="font-semibold mb-1">View Customers</p>

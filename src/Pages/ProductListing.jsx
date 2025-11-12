@@ -191,7 +191,7 @@ const ProductListing = () => {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
               <div key={product.id} className="bg-gray-800 border border-gray-700 overflow-hidden group">
-                <div className="relative bg-gray-700 h-64 overflow-hidden">
+                <div className="relative bg-gray-700 h-48 overflow-hidden">
                   {product.images && product.images.length > 0 ? (
                     <img
                       src={product.images[0]}
@@ -230,11 +230,11 @@ const ProductListing = () => {
                     {product.brand && <span>{product.brand}</span>}
                   </div>
 
-                  <h3 className="text-sm font-semibold text-white mb-2 line-clamp-2 min-h-[2.5rem]">
+                  <h3 className="text-sm font-semibold text-white  ">
                     {product.name}
                   </h3>
 
-                  <div className="flex items-baseline gap-2 mb-3">
+                  <div className="flex items-baseline gap-2 mb-1">
                     <span className="text-lg font-bold text-pink-300">
                       ₦{product.price?.toLocaleString()}
                     </span>

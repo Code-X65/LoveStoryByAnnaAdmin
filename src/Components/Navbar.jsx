@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Tag, Truck, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
-
+import Logo from '../assets/Logo.png'
 const Navbar = ({ collapsed, setCollapsed }) => {
   const location = useLocation();
 
@@ -23,8 +23,8 @@ const Navbar = ({ collapsed, setCollapsed }) => {
       <div className="p-6 flex items-center justify-between border-b border-slate-800">
         {!collapsed && (
           <div>
-            <img src="https://lovestorybyanna.com/wp-content/uploads/2025/02/cropped-Black-and-Yellow-Classy-and-Refined-Curved-Text-Logo-70x69.png" alt="" />
-            <h1 className="text-xl font-bold">LoveStoryByAnna</h1>
+            <img src={Logo} alt="" className='w-24' />
+            
             <p className="text-xs text-slate-400 mt-1">Admin Dashboard</p>
           </div>
         )}
